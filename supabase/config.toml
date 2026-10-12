@@ -6,7 +6,9 @@
 # CRON_SECRET ověřují samy (bez něj 401). Při ručním nasazení:
 #   supabase functions deploy publisher --no-verify-jwt
 #   supabase functions deploy check-accounts --no-verify-jwt
-#   supabase functions deploy meta-sync
+#   supabase functions deploy meta-sync --no-verify-jwt
+# Pozn. 12. 10. 2026: CLI nasazení padá na 500 u souborů v podsložkách — používat
+#   SUPABASE_ACCESS_TOKEN=… node supabase/nasad-funkce.mjs
 project_id = "subbau-social"
 
 [functions.publisher]
@@ -16,4 +18,5 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.meta-sync]
-verify_jwt = true
+# Projekt má nové klíče; přihlášení si meta-sync ověřuje sám (getUser + app_users).
+verify_jwt = false
