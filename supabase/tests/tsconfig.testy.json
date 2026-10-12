@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "types": ["node"], "noUnusedLocals": false, "noUnusedParameters": false },
+  "include": ["pomocnik/**/*.ts", "db/**/*.ts", "logika/**/*.ts", "vitest.config.ts"]
+}

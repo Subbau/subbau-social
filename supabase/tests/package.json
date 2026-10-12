@@ -1,0 +1,21 @@
+{
+  "name": "subbau-social-supabase-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:db": "vitest run db",
+    "test:logika": "vitest run logika",
+    "typecheck": "tsc -p tsconfig.shared.json && tsc -p tsconfig.json && tsc -p tsconfig.testy.json",
+    "mutace": "node mutace.mjs"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "2.117.3",
+    "@types/node": "26.6.5",
+    "@types/pg": "8.23.1",
+    "embedded-postgres": "17.10.0-beta.17",
+    "pg": "8.23.1",
+    "typescript": "5.9.3",
+    "vitest": "5.0.4"
+  }
+}

@@ -1,0 +1,19 @@
+# Jen nastavení Edge funkcí, které se liší od výchozích; ostatní klíče CLI doplní výchozí.
+# Kdyby se pouštělo `supabase init`, tyto sekce do vygenerovaného souboru přenést.
+#
+# publisher a check-accounts volá pg_cron s hlavičkou Authorization: Bearer <CRON_SECRET>.
+# CRON_SECRET není JWT, proto bránu Supabase s ověřením JWT u nich vypínáme; funkce si
+# CRON_SECRET ověřují samy (bez něj 401). Při ručním nasazení:
+#   supabase functions deploy publisher --no-verify-jwt
+#   supabase functions deploy check-accounts --no-verify-jwt
+#   supabase functions deploy meta-sync
+project_id = "subbau-social"
+
+[functions.publisher]
+verify_jwt = false
+
+[functions.check-accounts]
+verify_jwt = false
+
+[functions.meta-sync]
+verify_jwt = true
