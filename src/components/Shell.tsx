@@ -9,6 +9,7 @@ import { OdhlasitTlacitko } from "./OdhlasitTlacitko";
 
 const MENU = [
   { href: "/kalendar", nazev: "Kalendář" },
+  { href: "/skupiny", nazev: "Skupiny" },
   { href: "/seznam", nazev: "Seznam" },
   { href: "/chyby", nazev: "Chyby" },
   { href: "/media", nazev: "Média" },

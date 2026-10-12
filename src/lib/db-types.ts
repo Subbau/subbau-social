@@ -167,6 +167,19 @@ export type AuditLog = {
   created_at: string;
 };
 
+
+// Typy Skupin jsou kvůli délce v samostatném souboru (stejný kontrakt, migrace 0008).
+import type {
+  DueGroupBatch,
+  FbGroup,
+  GroupBatch,
+  GroupCampaign,
+  GroupCampaignMedia,
+  GroupTask,
+  PushSubscriptionRow,
+} from "./db-types-skupiny";
+export type * from "./db-types-skupiny";
+
 /** Pomocník: Insert = povinné sloupce + volitelné ostatní. */
 type Ins<Row, Required extends keyof Row> = Pick<Row, Required> & Partial<Omit<Row, Required>>;
 
@@ -314,6 +327,87 @@ export type Database = {
           },
         ];
       };
+      fb_groups: {
+        Row: FbGroup;
+        Insert: Ins<FbGroup, "name">;
+        Update: Partial<FbGroup>;
+        Relationships: Rel[];
+      };
+      group_campaigns: {
+        Row: GroupCampaign;
+        Insert: Ins<GroupCampaign, "title" | "variants" | "starts_at">;
+        Update: Partial<GroupCampaign>;
+        Relationships: Rel[];
+      };
+      group_campaign_media: {
+        Row: GroupCampaignMedia;
+        Insert: GroupCampaignMedia;
+        Update: Partial<GroupCampaignMedia>;
+        Relationships: [
+          {
+            foreignKeyName: "group_campaign_media_campaign_id_fkey";
+            columns: ["campaign_id"];
+            isOneToOne: false;
+            referencedRelation: "group_campaigns";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "group_campaign_media_asset_id_fkey";
+            columns: ["asset_id"];
+            isOneToOne: false;
+            referencedRelation: "media_assets";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      group_batches: {
+        Row: GroupBatch;
+        Insert: Ins<GroupBatch, "campaign_id" | "batch_no" | "due_at">;
+        Update: Partial<GroupBatch>;
+        Relationships: [
+          {
+            foreignKeyName: "group_batches_campaign_id_fkey";
+            columns: ["campaign_id"];
+            isOneToOne: false;
+            referencedRelation: "group_campaigns";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      group_tasks: {
+        Row: GroupTask;
+        Insert: Ins<GroupTask, "campaign_id" | "batch_id" | "group_id" | "variant_index">;
+        Update: Partial<GroupTask>;
+        Relationships: [
+          {
+            foreignKeyName: "group_tasks_campaign_id_fkey";
+            columns: ["campaign_id"];
+            isOneToOne: false;
+            referencedRelation: "group_campaigns";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "group_tasks_batch_id_fkey";
+            columns: ["batch_id"];
+            isOneToOne: false;
+            referencedRelation: "group_batches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "group_tasks_group_id_fkey";
+            columns: ["group_id"];
+            isOneToOne: false;
+            referencedRelation: "fb_groups";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      push_subscriptions: {
+        Row: PushSubscriptionRow;
+        Insert: Ins<PushSubscriptionRow, "endpoint" | "p256dh" | "auth">;
+        Update: Partial<PushSubscriptionRow>;
+        Relationships: Rel[];
+      };
       audit_log: {
         Row: AuditLog;
         Insert: Partial<AuditLog>;
@@ -325,6 +419,22 @@ export type Database = {
     Functions: {
       is_app_user: { Args: Record<string, never>; Returns: boolean };
       generate_series_occurrences: { Args: { p_series_id: string }; Returns: number };
+      create_group_campaign: {
+        Args: {
+          p_title: string;
+          p_variants: string[];
+          p_asset_ids: string[];
+          p_group_ids: string[];
+          p_starts_at: string;
+          p_batch_size: number;
+          p_batch_interval_minutes: number;
+        };
+        Returns: string;
+      };
+      /** jen service_role */
+      due_group_batches: { Args: { p_limit?: number }; Returns: DueGroupBatch[] };
+      /** jen service_role — vrátí dávce notified_at = null (nedoručené upozornění) */
+      release_group_batch: { Args: { p_batch_id: string }; Returns: boolean };
     };
     Enums: {
       platform: Platform;

@@ -257,3 +257,113 @@ SPEC.md jsem neměnil.
     - `nahrajDoKnihovny` kontroluje neobrázky ještě jednou sám (pojistka pro jiná
       volání) a má teď vstříknutelné závislosti kvůli testům.
     - MB v hlášce = 1 048 576 B, desetinná čárka.
+
+## Skupiny (SPEC-SKUPINY.md)
+
+47. **Nic se do skupin neposílá automaticky.** Appka jen připraví dávky, pošle
+    upozornění a na `/skupiny/dnes` jedním klepnutím zkopíruje text a otevře sdílení.
+48. **Rozpis dávek** (`src/lib/skupiny/rozpis.ts`) je ověřený proti
+    `create_group_campaign` v 0008:
+    - neaktivní skupiny se přeskočí;
+    - stejná skupina v poli se bere jen při prvním výskytu;
+    - `variant_index = pořadí od 0 % počet variant`;
+    - `batch_no = pořadí / velikost + 1`;
+    - `due_at = start + (batch_no − 1) × odstup` v pevných minutách.
+    Náhled v `/skupiny/nova` tak ukazuje totéž, co vytvoří DB.
+49. **Pořadí skupin v nové rozesílce:** nejdřív ty, kam se nikdy neposílalo, pak podle
+    `last_sent_at` od nejstaršího, při shodě podle jména. Rozkládá to zátěž po skupinách.
+50. **Import ze zkopírované stránky:**
+    - vynechá řádky ze SPEC a pár dalších běžných řádků FB stránky („Zobrazit skupinu“,
+      „Vaše skupiny“, „Objevit“, „Vytvořit novou skupinu“ …);
+    - řádek `název<TAB>url` se rozdělí na název a odkaz;
+    - samotný odkaz na dalším řádku patří ke jménu nad ním;
+    - odkazy se normalizují na `https://www.facebook.com/groups/<id>`; cizí domény nejsou skupina.
+    - Duplicitní jména — **nahrazeno bodem 60** (původní slučování ztrácelo skupiny).
+51. **„Otevřít skupinu“** použije uloženou URL, jen když je to `https://…facebook.com/…`.
+    Jinak otevře `https://www.facebook.com/search/groups/?q=<název>` (URL-encode).
+    Brání to i podvrženým `javascript:` odkazům.
+52. **„Sdílet do skupiny“:**
+    - obrázek rozesílky (první obrázek, jinak první médium) se stáhne jako `File`
+      **předem**, protože sdílení musí proběhnout hned po klepnutí;
+    - po klepnutí appka zapíše text do schránky a hned zavolá `navigator.share({ files, text })`;
+    - kde sdílení souborů nejde, obrázek se stáhne;
+    - hláška je podle SPEC.
+53. **Fronta „Dnes“** (`src/lib/skupiny/fronta.ts`):
+    - jen čekající úkoly splatných dávek aktivních rozesílek;
+    - řazení podle času a čísla dávky, v dávce podle názvu (úkoly v DB nemají pořadí);
+    - počítadla „x / y v dávce · x / y celkem“ = hotové + pozice ve frontě.
+    - „Zpět o jednu“ vrátí poslední úkol mezi čekající; DB pak hotovou kampaň vrátí
+      na `active`.
+54. **Cron route `/api/cron/skupiny`** (POST, Node runtime):
+    - chybí `VERCEL_CRON_SECRET` → 500;
+    - špatný, chybějící nebo krátký (< 32 znaků) Bearer → 401, porovnání
+      `timingSafeEqual` na sha256 otiscích;
+    - chybí jiná env → 500 se jmény proměnných (bez hodnot);
+    - používá `due_group_batches(10)` a počty z jeho výsledku (`batch_count`,
+      `pending_count`; kdyby chyběly, dopočítají se);
+    - odběry s 404/410 smaže a v dalších dávkách je už nezkouší;
+    - odpověď obsahuje jen počty;
+    - proxy (přihlašování) na `/api/cron/`, `/sw.js` a `/manifest.webmanifest`
+      nesahá, jinak by cron skončil přesměrováním na /login.
+55. **Text upozornění:** „Skupiny: dávka X z Y — N skupin čeká“, česky skloňované
+    (1 skupina čeká / 2–4 skupiny čekají / 5+ skupin čeká).
+    - Klik otevře `/skupiny/dnes` (service worker otevře jen URL vlastní domény).
+    - `tag` podle kampaně, aby se upozornění na telefonu nehromadila.
+56. **PWA:**
+    - `manifest.webmanifest` začíná na `/skupiny/dnes`;
+    - ikony 192/512 + apple-touch jsou jednoduché modré „S“ (generované, bez knihoven);
+    - `sw.js` nemá posluchač `fetch`, tedy žádné cachování, a posílá se s `no-cache`.
+    - Panel „Upozornění v telefonu“ je na `/skupiny`. Na iPhonu mimo plochu ukáže
+      návod „Sdílet → Přidat na plochu“.
+    - Opakované zapnutí ve stejném prohlížeči smaže starý řádek podle endpointu a vloží nový.
+57. **Tajemství:**
+    - `SUPABASE_SECRET_KEY`, `VAPID_PRIVATE_KEY` a `VERCEL_CRON_SECRET` čtou jen
+      `route.ts` a `src/lib/skupiny/cron-server.ts`. Hlídá to `tajemstvi.test.ts`,
+      který zakazuje i `NEXT_PUBLIC_*SECRET/PRIVATE`.
+    - Po buildu se zkušebními hodnotami ověří `npm run kontrola:bundl`, že tajné hodnoty
+      ani jména v `.next/static` nejsou.
+    - Kontrola má pozitivní kontrolu: veřejný VAPID klíč v bundlu být musí, jinak selže.
+    - Úvod `.env.example` jsem upravil: výjimkou z „jen RLS“ je cron route.
+58. **„Poslat i do skupin“** v editoru předá text a média přes `sessionStorage`
+    (i neuložené úpravy, ne v URL). `/skupiny/nova` je načte a smaže; podezřelá id
+    se zahodí.
+59. **Nový balík:** `web-push` (+ `@types/web-push`), podle zadání.
+
+## Opravy Skupin po kontrole
+
+60. **Import: stejná jména jsou různé skupiny.**
+    - V rámci jednoho importu se zachovají všechny výskyty, např. 6× „Práce v Německu“
+      a 5× „Práca v Nemecku“.
+    - Proti DB se u každého jména bez odkazu odečte tolik výskytů, kolik řádků se
+      stejným jménem (i s odkazem) už v DB je. Stejný import podruhé = 0 nových.
+    - Řádky s odkazem se dál porovnávají podle odkazu.
+    - Náhled ukazuje „6× Práce v Německu — uloží se jako 6 samostatných skupin“, nebo
+      „… N už je uloženo, nově se uloží M“.
+61. **Import po dávkách** (`ulozImport`) počítá výběr vždy z čerstvě načtené DB.
+    - Po chybě v půlce znovu načte skupiny a náhled ukáže, co zbývá.
+    - Opakované „Uložit“ tak nic nezdvojí ani se zastaralou stránkou.
+62. **Šum „před …“** je jen:
+    - přesný časový údaj („před 3 týdny“, „před týdnem“, „před několika sekundami“,
+      „před 4 min“, „před 2 lety“), nebo
+    - jakýkoli řádek „před …“ hned po řádku „Naposledy jste tu byl(a)“.
+    Skupina „Před stavbou – práce“ zůstane.
+63. **Upozornění v telefonu** (`src/lib/skupiny/odber.ts`):
+    - „Zapnuto“ jen když prohlížeč má odběr a v `push_subscriptions` je k němu
+      vlastní řádek.
+    - Chybí-li řádek, uloží se znovu (upsert podle endpointu) a ověří. Když to selže,
+      panel ukáže „Vypnuto“ s chybou.
+    - Vypnutí nejdřív smaže řádek (chyba se ukáže a v prohlížeči se pak neodhlašuje),
+      teprve potom odhlásí.
+64. **Cron a nedoručená dávka:** když upozornění dávky nedošlo na žádný odběr kvůli
+    chybě (odběry nejdou načíst, nebo všechna odeslání skončila 5xx nebo chybou sítě),
+    route zavolá `release_group_batch(p_batch_id)` a dávka se zkusí v další minutě.
+    - Při nule odběrů, nebo když byly všechny odběry neplatné (404/410, smazané), se
+      dávka nevrací (jinak by vznikla nekonečná smyčka); jen se zaloguje.
+    - Odpověď má nově počet `vraceno`.
+    - `release_group_batch` v migracích zatím nevidím; typ je podle zadání
+      (`p_batch_id uuid → boolean`, jen service_role).
+65. **`import "server-only"`** je v `cron-server.ts` i `route.ts` (balík `server-only`,
+    oficiální značka React/Next).
+    - Ve vitestu se aliasuje na jeho prázdný modul, stejně jako to dělá Next.js
+      v serverovém kódu.
+    - `tajemstvi.test.ts` hlídá, že každý soubor, který čte tajná env, ho má.

@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { KLIC_PREDVYPLNENI, zabalPredvyplneni } from "@/lib/skupiny/predvyplneni";
 import type { AccountTimeSlot, MediaAsset, PostFormat, SocialAccount } from "@/lib/db-types";
 import { FORMATY_NAZEV, povoleneFormaty, SITE } from "@/lib/stavy";
 import { hezkyCas } from "@/lib/cas";
@@ -45,6 +47,7 @@ export function ZalozkaVarianty({
   zmena: (z: Partial<Varianta>) => void;
   akce: AkceVarianty;
 }) {
+  const router = useRouter();
   const formaty = povoleneFormaty(ucet.platform);
   const kdy = okamzikVarianty(v, ucet.timezone);
   const povolenaDuplicita = v.platform_options.allow_duplicate === true;
@@ -174,6 +177,19 @@ export function ZalozkaVarianty({
               Duplikovat
             </Tlacitko>
           )}
+          <Tlacitko
+            onClick={() => {
+              sessionStorage.setItem(
+                KLIC_PREDVYPLNENI,
+                zabalPredvyplneni({ text: v.caption, assetIds: v.media.map((m) => m.id), zdroj: v.id }),
+              );
+              router.push("/skupiny/nova");
+            }}
+            disabled={pracuji || (!v.caption.trim() && v.media.length === 0)}
+            title="Připraví rozesílku do facebookových skupin s tímto textem a médii"
+          >
+            Poslat i do skupin
+          </Tlacitko>
           {(v.id === null || v.status === "draft" || v.status === "scheduled" || v.status === "failed") && (
             <Tlacitko varianta="nebezpecne" onClick={akce.smazat} disabled={pracuji}>
               {v.id ? "Smazat" : "Odebrat účet"}

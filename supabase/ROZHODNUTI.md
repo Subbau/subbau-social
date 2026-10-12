@@ -232,6 +232,51 @@ Body 1 a 3 rozhodl koordinátor po kontrole (12. 10.); část „Opravy po kontr
       zapsané, zbytek se zkontroluje další den (nic se nerozbije). Neměnil jsem; kdyby to vadilo,
       stačí termín jako u publisheru nebo kratší timeout.
 
+## Skupiny (0008_skupiny.sql, setup/06, podle SPEC-SKUPINY.md)
+48. 0008 jde pustit nad nasazeným stavem 0001–0007 a nic z nich nemění; používá
+    `is_app_user()`, `nastav_updated_at()`, `media_assets`, `auth.users`. Testy ji pouští po
+    0001–0007 na čisté databázi (PG 17.10 + napodobenina Supabase).
+49. Varianty textu hlídá funkce `varianty_platne(text[])` (1–3, žádná null ani jen mezery) —
+    v check constraintu nejde poddotaz. Nad SPEC: `fb_groups.name` a `group_campaigns.title`
+    nesmí být prázdné; `variant_index` 0–2; `batch_no ≥ 1`.
+50. `push_subscriptions`: politiky select/insert/delete jen vlastní (`user_id = auth.uid()`
+    + `is_app_user()`). **Nad SPEC i update** (taky jen vlastní a jen na sebe), aby UI mohlo
+    upsertovat stejný endpoint při novém přihlášení. Testy ověřují i dotazy bez WHERE, kde
+    platí jen politika update/delete (select politika je nemaskuje).
+51. Trigger úkolů: `done_at = now()` při `sent` **i `skipped`**, při návratu na `pending` null.
+    Před počítáním pending úkolů **zamkne řádek kampaně** (`for update`) — dva poslední úkoly
+    odškrtnuté naráz ze dvou spojení by jinak nechaly kampaň `active` (test se dvěma spojeními).
+    `fb_groups.last_sent_at` se přepočítá jako poslední `done_at` odeslaných úkolů skupiny —
+    „Zpět“ tak vrátí předchozí hodnotu (i z dřívější kampaně), ne „teď“. Kampaň bez pending
+    úkolů → `done`; „Zpět“ u hotové → zase `active`; zrušená (`cancelled`) se nemění.
+52. `create_group_campaign` je **security definer** (oprava po kontrole: dávky klient
+    nesmí zapisovat, viz 55) a hned na začátku ověří `is_app_user()` („Nemáte přístup do
+    aplikace.“). Všechny politiky skupin jsou `is_app_user()`, takže výsledek je stejný jako
+    s RLS (SPEC říká invoker — rozdíl je jen v tom, kdo dávky zapisuje). Skupiny v pořadí pole; opakované id v poli se bere jednou (první
+    výskyt), neaktivní, neexistující a pro uživatele neviditelné (RLS) se přeskočí; varianta =
+    pořadí mezi zařazenými skupinami % počet variant. `p_batch_size`/`p_batch_interval_minutes`
+    null → 20 / 120. Média od pozice 0 v pořadí pole. Bez dočasné tabulky (klient nemusí mít
+    právo TEMP). Chyby česky (`22023`), vše v jedné transakci (chyba = nic se nezaloží).
+53. `due_group_batches(p_limit)` vrací `batch_id, campaign_id, campaign_title, batch_no,
+    batch_count, due_at, pending_count`. Zmeškané (> 12 h, jediná konstanta `c_zmeskano`) jen
+    označí. **Nad SPEC:** dávka bez pending úkolů (uživatel ji udělal dřív) se taky jen označí
+    a nevrátí — notifikace „0 skupin čeká“ nemá smysl. Dávky zrušených kampaní se neoznačují.
+    Souběh: `for update of x skip locked` + update v téže transakci → druhé volání dávku
+    nevrátí (test se dvěma spojeními i se čtyřmi souběžnými).
+54. `setup/06_cron_skupiny.sql` ukládá i secret do Vaultu (`subbau_vercel_cron_secret`) —
+    nikde jinde se neukládal. Hlídá placeholder domény i jejího tvaru (bez `https://`,
+    bez lomítka) a secretu (min. 32 znaků). Při opakování smí secret zůstat placeholderem,
+    pak se ve Vaultu nemění. Úloha `subbau-skupiny`, každou minutu, timeout 30 s.
+
+55. **`group_batches` klient jen čte** (grant SELECT a jen select politika). Kdyby směl
+    měnit `notified_at`, vynutil by si opakované notifikace. Dávky zakládá
+    `create_group_campaign`, značí `due_group_batches`, uvolňuje `release_group_batch`;
+    smazání kampaně je smaže kaskádou.
+56. **`release_group_batch(p_batch_id uuid) returns boolean`** — jen service_role. Cron route
+    ji zavolá, když se notifikace dávky nedoručila na žádný odběr: vrátí `notified_at = null`,
+    jen když je kampaň `active` a dávka má pending úkoly (jinak false, nic nemění). Další běh
+    `due_group_batches` dávku vrátí znovu; strop 12 h platí dál (zmeškaná se zase jen označí).
+
 ## Co ověřit nešlo
 - **Deno není nainstalované** → Edge funkce (`publisher`, `meta-sync`, `check-accounts`, `_deno/`)
   prošly jen `tsc --noEmit` (strict) s minimálním shimem `Deno.env/serve` a skutečnými typy
@@ -242,6 +287,9 @@ Body 1 a 3 rozhodl koordinátor po kontrole (12. 10.); část „Opravy po kontr
   `tests/stubs_cron.sql`); šifrování Vaultu, podepsané URL a skutečné volání cronu ne.
 - Jestli Edge funkce doběhne, když pg_net po 150 s spojení zavře (limit Free 150 s, placený 400 s).
 - Jestli minutové volání z pg_cron brání uspání projektu na plánu Free (bod 46).
+- 0008 a setup 06 na ostrém projektu (PG 17.11, skutečný pg_cron/pg_net/Vault) — jen na
+  zkušebním PG 17.10 s napodobeninou. Vercel route `/api/cron/skupiny` a Web Push nejsou
+  moje část.
 - Že Graph API bere `Authorization: Bearer` u všech použitých volání — podle koordinátora ano,
   živě neověřeno.
 

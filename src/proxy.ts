@@ -7,7 +7,8 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // vše kromě statických souborů Next.js a obrázků
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    // Vše kromě statických souborů Next.js, obrázků, PWA souborů (manifest, service worker)
+    // a cronu (ten se ověřuje vlastním tajemstvím, ne přihlášením — přesměrování na /login by ho rozbilo).
+    "/((?!_next/static|_next/image|favicon.ico|api/cron/|sw\\.js$|manifest\\.webmanifest$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

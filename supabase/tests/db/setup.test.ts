@@ -92,4 +92,38 @@ describe('setup', () => {
     expect(c).toHaveLength(1);
     expect((await root.query(`select public.publisher_get_token($1) t`, [c[0].id])).rows[0].t).toBe('EAAB-druhy');
   });
+
+  it('06 cron skupin: zábrany domény a secretu; úloha bez secretu v textu; Bearer z Vaultu, timeout 30 s', async () => {
+    const SECRET = 'v'.repeat(40);
+    const sql = cti('06_cron_skupiny.sql').replace(/^create extension .*$/gm, '');
+    const s = (domena: string, secret = '<<DOPLNIT VERCEL_CRON_SECRET (min. 32 znaků)>>') =>
+      sql.replaceAll('<<DOPLNIT VERCEL DOMÉNA>>', domena).replace('<<DOPLNIT VERCEL_CRON_SECRET (min. 32 znaků)>>', secret);
+    expect(await chyba(root.query(sql))).toMatch(/Doplňte doménu appky/);
+    expect(await chyba(root.query(s('https://subbau-social.vercel.app', SECRET)))).toMatch(/bez https:\/\//);
+    expect(await chyba(root.query(s('subbau-social.vercel.app/', SECRET)))).toMatch(/bez https:\/\//);
+    expect(await chyba(root.query(s('subbau-social.vercel.app')))).toMatch(/Doplňte VERCEL_CRON_SECRET/);
+    expect(await chyba(root.query(s('subbau-social.vercel.app', 'kratke')))).toMatch(/aspoň 32 znaků/);
+    expect((await root.query(`select count(*)::int n from cron.job where jobname = 'subbau-skupiny'`)).rows[0].n).toBe(0);
+
+    await root.query(s('subbau-social.vercel.app', SECRET));
+    await root.query(s('subbau-social.vercel.app')); // znovu bez secretu → starý zůstane
+    const sekret = await root.query(`select decrypted_secret from vault.decrypted_secrets where name = 'subbau_vercel_cron_secret'`);
+    expect(sekret.rows).toEqual([{ decrypted_secret: SECRET }]);
+
+    const uloha = (await root.query(`select schedule, command from cron.job where jobname = 'subbau-skupiny'`)).rows;
+    expect(uloha).toHaveLength(1);
+    expect(uloha[0].schedule).toBe('* * * * *');
+    expect(uloha[0].command).not.toContain(SECRET);
+    await root.query(uloha[0].command);
+    const pozadavek = (await root.query(`select url, headers, timeout_milliseconds from net.pozadavky where url like '%/api/cron/skupiny' order by id desc limit 1`)).rows[0];
+    expect(pozadavek).toEqual({
+      url: 'https://subbau-social.vercel.app/api/cron/skupiny',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SECRET}` },
+      timeout_milliseconds: 30000,
+    });
+
+    await root.query(s('subbau-social.vercel.app', 'w'.repeat(40)));
+    expect((await root.query(`select decrypted_secret from vault.decrypted_secrets where name = 'subbau_vercel_cron_secret'`)).rows[0].decrypted_secret)
+      .toBe('w'.repeat(40));
+  });
 });
