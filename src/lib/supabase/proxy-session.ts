@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { supabaseEnv } from "./env";
 
 const VEREJNE = ["/login"];
+// Stránky pro kohokoli (Meta je kontroluje bez přihlášení); přihlášeného nepřesměrovávají.
+const VZDY_VEREJNE = ["/zasady-ochrany-udaju"];
 
 /**
  * Obnoví session (cookies) a nepřihlášené pošle na /login.
@@ -10,6 +12,7 @@ const VEREJNE = ["/login"];
  */
 export async function obnovSession(request: NextRequest): Promise<NextResponse> {
   const cesta = request.nextUrl.pathname;
+  if (VZDY_VEREJNE.includes(cesta)) return NextResponse.next({ request });
   const jeVerejna = VEREJNE.some((v) => cesta === v || cesta.startsWith(`${v}/`));
   let response = NextResponse.next({ request });
   const env = supabaseEnv();
